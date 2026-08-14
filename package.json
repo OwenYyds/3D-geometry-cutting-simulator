@@ -1,0 +1,21 @@
+{
+  "name": "geometry-cutting-simulator",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "latest",
+    "three": "latest",
+    "vue": "latest"
+  },
+  "devDependencies": {
+    "@types/three": "latest",
+    "typescript": "~5.7.3",
+    "vite": "latest",
+    "vue-tsc": "latest"
+  }
+}
