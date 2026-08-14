@@ -1,97 +1,25 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-
-type Shape = 'cube' | 'prism' | 'triangular' | 'cylinder' | 'cone'
-const geometries: { id: Shape; name: string; subtitle: string; icon: string }[] = [
-  { id: 'cube', name: '正方体', subtitle: 'Cube', icon: '◇' },
-  { id: 'prism', name: '长方体', subtitle: 'Rectangular prism', icon: '▱' },
-  { id: 'triangular', name: '三棱柱', subtitle: 'Triangular prism', icon: '△' },
-  { id: 'cylinder', name: '圆柱', subtitle: 'Cylinder', icon: '○' },
-  { id: 'cone', name: '圆锥', subtitle: 'Cone', icon: '△' }
-]
-const selected = ref<Shape | null>(null)
-const host = ref<HTMLDivElement>()
-const cutPosition = ref(0)
-const showSection = ref(true)
-const selectedName = computed(() => geometries.find(g => g.id === selected.value)?.name ?? '')
-
-let scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer
-let controls: OrbitControls, model: THREE.Mesh, section: THREE.Mesh, plane: THREE.Plane
-let frame = 0
-let sceneReady = false
-
-function makeGeometry(shape: Shape) {
-  if (shape === 'cube') return new THREE.BoxGeometry(3, 3, 3, 1, 1, 1)
-  if (shape === 'prism') return new THREE.BoxGeometry(4.4, 2.6, 2.8, 1, 1, 1)
-  if (shape === 'triangular') {
-    const g = new THREE.CylinderGeometry(1.9, 1.9, 3.5, 3, 1, false, Math.PI / 2)
-    g.rotateX(Math.PI / 2)
-    return g
-  }
-  if (shape === 'cylinder') return new THREE.CylinderGeometry(1.6, 1.6, 3.8, 48)
-  return new THREE.ConeGeometry(1.9, 4, 48)
-}
-function initScene() {
-  if (!host.value) return
-  scene = new THREE.Scene(); scene.background = new THREE.Color('#f7faff')
-  camera = new THREE.PerspectiveCamera(42, host.value.clientWidth / host.value.clientHeight, .1, 100)
-  camera.position.set(6.5, 5.8, 7)
-  renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(devicePixelRatio); renderer.setSize(host.value.clientWidth, host.value.clientHeight)
-  renderer.localClippingEnabled = true; host.value.appendChild(renderer.domElement)
-  sceneReady = true
-  controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0)
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x9bbbe0, 2.4))
-  const light = new THREE.DirectionalLight(0xffffff, 2); light.position.set(4, 7, 6); scene.add(light)
-  scene.add(new THREE.GridHelper(12, 12, 0xd7e4f4, 0xe7eef8).translateY(-2.15))
-  plane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0)
-  const helper = new THREE.PlaneHelper(plane, 5.8, 0x4d7cff); const helperMaterial = helper.material as THREE.LineBasicMaterial; helperMaterial.transparent = true; helperMaterial.opacity = .52; scene.add(helper)
-  model = new THREE.Mesh(); section = new THREE.Mesh(); scene.add(model, section)
-  window.addEventListener('resize', resize)
-  animate()
-}
-function setModel(shape: Shape) {
-  if (!scene) return
-  model.geometry?.dispose(); (model.material as THREE.Material)?.dispose()
-  model.geometry = makeGeometry(shape)
-  model.material = new THREE.MeshStandardMaterial({ color: 0x55a6ec, roughness: .34, metalness: .05, clippingPlanes: [plane], clipShadows: true, side: THREE.DoubleSide })
-  section.geometry?.dispose(); (section.material as THREE.Material)?.dispose()
-  section.geometry = new THREE.PlaneGeometry(5.7, 5.7)
-  section.material = new THREE.MeshBasicMaterial({ color: 0x2767e8, transparent: true, opacity: .19, side: THREE.DoubleSide, depthWrite: false })
-  section.rotation.y = Math.PI / 2
-  updateCut()
-}
-function updateCut() {
-  if (!plane) return
-  plane.constant = -cutPosition.value
-  if (section) { section.position.x = cutPosition.value; section.visible = showSection.value }
-}
-function openShape(shape: Shape) { selected.value = shape; nextTick(() => { if (!sceneReady) initScene(); setModel(shape) }) }
-function disposeScene() {
-  cancelAnimationFrame(frame)
-  if (renderer) {
-    renderer.dispose()
-    renderer.domElement.remove()
-  }
-  sceneReady = false
-}
-function home() { disposeScene(); selected.value = null }
-function preset(kind: 'triangle' | 'trapezoid' | 'hexagon') {
-  if (kind === 'triangle') { selected.value = 'cone'; cutPosition.value = 0; nextTick(() => setModel('cone')) }
-  if (kind === 'trapezoid') { selected.value = 'triangular'; cutPosition.value = .2; nextTick(() => setModel('triangular')) }
-  if (kind === 'hexagon') { selected.value = 'cylinder'; cutPosition.value = 0; nextTick(() => setModel('cylinder')) }
-}
-function resize() { if (!host.value || !camera) return; camera.aspect = host.value.clientWidth / host.value.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(host.value.clientWidth, host.value.clientHeight) }
-function animate() { frame = requestAnimationFrame(animate); controls?.update(); renderer?.render(scene, camera) }
-watch([cutPosition, showSection], updateCut)
-onBeforeUnmount(() => { disposeScene(); window.removeEventListener('resize', resize) })
+import { calculatePlaneCubeIntersections, calculatePlaneGeometryIntersections, createPlaneFromEquation, cuttingPresets, type CuttingPreset } from './cutting'
+type Shape='cube'|'prism'|'triangular'|'cylinder'|'cone'
+const geometries=[{id:'cube',name:'正方体',subtitle:'Cube',icon:'◇'},{id:'prism',name:'长方体',subtitle:'Rectangular prism',icon:'▱'},{id:'triangular',name:'三棱柱',subtitle:'Triangular prism',icon:'△'},{id:'cylinder',name:'圆柱',subtitle:'Cylinder',icon:'○'},{id:'cone',name:'圆锥',subtitle:'Cone',icon:'△'}] as const
+const selected=ref<Shape|null>(null),host=ref<HTMLDivElement>(),showSection=ref(true),activePreset=ref('')
+const selectedName=computed(()=>geometries.find(g=>g.id===selected.value)?.name??'')
+const visiblePresets=computed(()=>cuttingPresets.filter(p=>p.shape===selected.value))
+let scene:THREE.Scene,camera:THREE.PerspectiveCamera,renderer:THREE.WebGLRenderer,controls:OrbitControls,solid:THREE.Mesh,edges:THREE.LineSegments,section:THREE.Mesh,sectionEdge:THREE.LineLoop,clipPlane:THREE.Plane
+let ready=false,frame=0,cameraFrame=0
+function shapeGeometry(shape:Shape){if(shape==='cube')return new THREE.BoxGeometry(2,2,2);if(shape==='prism')return new THREE.BoxGeometry(3,1.8,2);if(shape==='triangular'){const g=new THREE.CylinderGeometry(1,1,2.4,3);g.rotateX(Math.PI/2);return g}if(shape==='cylinder')return new THREE.CylinderGeometry(1,1,2.4,48);return new THREE.ConeGeometry(1.1,2.4,48)}
+function initScene(){if(!host.value)return;scene=new THREE.Scene();scene.background=new THREE.Color('#f7faff');camera=new THREE.PerspectiveCamera(42,host.value.clientWidth/host.value.clientHeight,.1,100);camera.position.set(5,4,6);renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(devicePixelRatio);renderer.setSize(host.value.clientWidth,host.value.clientHeight);renderer.localClippingEnabled=true;host.value.appendChild(renderer.domElement);controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;scene.add(new THREE.HemisphereLight(0xffffff,0x9bbbe0,2.5));const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(4,7,6);scene.add(light,new THREE.GridHelper(9,9,0xd7e4f4,0xe7eef8).translateY(-1.25));clipPlane=createPlaneFromEquation(1,0,0,10);solid=new THREE.Mesh();edges=new THREE.LineSegments();section=new THREE.Mesh();sectionEdge=new THREE.LineLoop();scene.add(solid,edges,section,sectionEdge);ready=true;window.addEventListener('resize',resize);renderLoop()}
+function setModel(shape:Shape){const g=shapeGeometry(shape);solid.geometry?.dispose();edges.geometry?.dispose();solid.geometry=g;solid.material=new THREE.MeshBasicMaterial({color:0xd5d9df,transparent:true,opacity:.25,side:THREE.DoubleSide});edges.geometry=new THREE.EdgesGeometry(g);edges.material=new THREE.LineBasicMaterial({color:0x445468});section.visible=false;sectionEdge.visible=false}
+function updateCuttingPlane(preset:CuttingPreset){const [a,b,c]=preset.plane.normal;clipPlane=createPlaneFromEquation(a,b,c,preset.plane.constant)}
+function updateSectionMesh(preset:CuttingPreset){const points=preset.shape==='cube'?calculatePlaneCubeIntersections(preset.plane.normal,preset.plane.constant):calculatePlaneGeometryIntersections(solid.geometry,preset.plane.normal,preset.plane.constant);if(points.length<3)return;const indices:number[]=[];for(let i=1;i<points.length-1;i++)indices.push(0,i,i+1);const geometry=new THREE.BufferGeometry().setFromPoints(points);geometry.setIndex(indices);geometry.computeVertexNormals();section.geometry?.dispose();section.geometry=geometry;section.material=new THREE.MeshBasicMaterial({color:0xff5555,transparent:true,opacity:.65,side:THREE.DoubleSide,depthWrite:false});sectionEdge.geometry?.dispose();sectionEdge.geometry=new THREE.BufferGeometry().setFromPoints(points);sectionEdge.material=new THREE.LineBasicMaterial({color:0xc92323});section.visible=showSection.value;sectionEdge.visible=showSection.value}
+function fitCameraToCuttingScene(preset:CuttingPreset){const [a,b,c]=preset.plane.normal,point=new THREE.Vector3(a,b,c).multiplyScalar(preset.plane.constant/(a*a+b*b+c*c));const end=preset.camera?new THREE.Vector3(...preset.camera.position):point.clone().add(new THREE.Vector3(4.8,3.8,5.5).normalize().multiplyScalar(7));const target=preset.camera?new THREE.Vector3(...preset.camera.target):point;const from=camera.position.clone(),fromTarget=controls.target.clone(),start=performance.now();cancelAnimationFrame(cameraFrame);const move=(now:number)=>{const t=Math.min((now-start)/600,1),e=1-(1-t)**3;camera.position.lerpVectors(from,end,e);controls.target.lerpVectors(fromTarget,target,e);controls.update();if(t<1)cameraFrame=requestAnimationFrame(move)};cameraFrame=requestAnimationFrame(move)}
+function loadCuttingPreset(preset:CuttingPreset){activePreset.value=preset.id;nextTick(()=>{if(!ready)initScene();if(selected.value!==preset.shape)selected.value=preset.shape!;setModel(preset.shape!);updateCuttingPlane(preset);updateSectionMesh(preset);fitCameraToCuttingScene(preset)})}
+function openShape(shape:Shape){selected.value=shape;activePreset.value='';nextTick(()=>{if(!ready)initScene();setModel(shape);fitCameraToCuttingScene({id:'default',name:'',plane:{normal:[1,1,1],constant:0}})})}
+function resetScene(){const preset=cuttingPresets.find(p=>p.id===activePreset.value);if(preset)fitCameraToCuttingScene(preset);else camera.position.set(5,4,6)}
+function home(){dispose();selected.value=null}function resize(){if(!ready||!host.value)return;camera.aspect=host.value.clientWidth/host.value.clientHeight;camera.updateProjectionMatrix();renderer.setSize(host.value.clientWidth,host.value.clientHeight)}function renderLoop(){frame=requestAnimationFrame(renderLoop);controls?.update();renderer?.render(scene,camera)}function dispose(){cancelAnimationFrame(frame);cancelAnimationFrame(cameraFrame);if(renderer){renderer.dispose();renderer.domElement.remove()}ready=false}
+onBeforeUnmount(()=>{dispose();window.removeEventListener('resize',resize)})
 </script>
-
-<template>
-  <main>
-    <header><div class="brand"><span>∠</span> 几何切割实验室</div><p>观察空间几何体截面的奇妙变化</p><button v-if="selected" class="home-btn" @click="home">← 返回首页</button></header>
-    <section v-if="!selected" class="home"><div class="hero"><div><span class="eyebrow">MATH EXPLORATION</span><h1>亲手切一切，<em>看见</em>空间几何</h1><p>拖动切割平面，实时探索不同角度下的截面形状。</p></div><div class="hero-shape">✦</div></div><h2>选择一个几何体开始实验</h2><div class="cards"><button v-for="g in geometries" :key="g.id" class="geometry-card" @click="openShape(g.id)"><span class="shape-icon">{{ g.icon }}</span><strong>{{ g.name }}</strong><small>{{ g.subtitle }}</small><i>开始探索 →</i></button></div></section>
-    <section v-else class="lab"><aside><div class="breadcrumb">几何实验 / {{ selectedName }}</div><h2>{{ selectedName }}切割实验</h2><p>使用鼠标拖拽旋转模型，滚轮缩放视图。</p><div class="panel"><label>切割平面位置 <b>{{ cutPosition.toFixed(1) }}</b></label><input v-model.number="cutPosition" type="range" min="-2.2" max="2.2" step="0.1" /><label class="toggle"><input v-model="showSection" type="checkbox" /> 显示截面辅助平面</label></div><div class="panel"><h3>预设截面</h3><div class="presets"><button @click="preset('triangle')">△<span>三角形</span></button><button @click="preset('trapezoid')">▱<span>梯形</span></button><button @click="preset('hexagon')">⬡<span>六边形</span></button></div></div><div class="tip">💡 尝试旋转模型，再调整切割位置，观察截面如何变化。</div></aside><div ref="host" class="viewer"><div class="viewer-label"><span></span> 切割平面</div><div class="controls-hint">拖拽旋转 · 滚轮缩放</div></div></section>
-  </main>
-</template>
+<template><main><header><div class="brand"><span>∠</span> 几何切割实验室</div><p>观察空间几何体截面的奇妙变化</p><button v-if="selected" class="home-btn" @click="home">← 返回首页</button></header><section v-if="!selected" class="home"><div class="hero"><div><span class="eyebrow">MATH EXPLORATION</span><h1>亲手切一切，<em>看见</em>空间几何</h1><p>选择一个几何体开始实验。</p></div><div class="hero-shape">✦</div></div><h2>选择一个几何体开始实验</h2><div class="cards"><button v-for="g in geometries" :key="g.id" class="geometry-card" @click="openShape(g.id)"><span class="shape-icon">{{g.icon}}</span><strong>{{g.name}}</strong><small>{{g.subtitle}}</small><i>开始探索 →</i></button></div></section><section v-else class="lab"><aside><div class="breadcrumb">几何实验 / {{selectedName}}</div><h2>{{selectedName}}切割实验</h2><p>选择{{ selectedName }}预设，查看真实三维求交得到的截面。</p><div class="panel"><label class="toggle"><input v-model="showSection" @change="section.visible=showSection;sectionEdge.visible=showSection" type="checkbox"> 显示切割面</label><button class="home-btn reset" @click="resetScene">重置视角</button></div><div class="panel"><h3>{{ selectedName }}预设</h3><div class="presets preset-grid"><button v-for="p in visiblePresets" :key="p.id" :class="{active:activePreset===p.id}" @click="loadCuttingPreset(p)"><span>{{p.name}}</span></button></div></div><div class="tip">💡 可继续拖动鼠标，从任意角度观察真实截面。</div></aside><div ref="host" class="viewer"><div class="viewer-label"><span></span> 真实几何截面</div><div class="controls-hint">拖拽旋转 · 滚轮缩放</div></div></section></main></template>
