@@ -1,0 +1,4 @@
+.lab aside { overflow-y: auto; }
+.preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 42vh; overflow-y: auto; padding-right: 4px; }
+.preset-grid button { min-height: 46px; font-size: 13px; }
+.reset { margin-top: 14px; width: 100%; }

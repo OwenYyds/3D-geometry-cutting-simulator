@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { calculatePlaneCubeIntersections, cuttingPresets } from './cutting'
+import { calculatePlaneCubeIntersections } from './cutting'
+import { cuttingPresets } from './presets'
 
 const lengths = (points: ReturnType<typeof calculatePlaneCubeIntersections>) => points.map((point, index) => point.distanceTo(points[(index + 1) % points.length]))
 describe('cube cutting presets', () => {
